@@ -1,4 +1,4 @@
-import { Component, NgZone, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 
 import { HttpClient } from '@angular/common/http';
 
@@ -36,7 +36,7 @@ export class ChatComponent  {
 
   private hubConnection?: signalR.HubConnection
 
-  constructor(public http: HttpClient, public authentication:AuthenticationService, private zone: NgZone){
+  constructor(public http: HttpClient, public authentication:AuthenticationService){
 
   }
 
@@ -48,9 +48,7 @@ export class ChatComponent  {
 
     // On peut commencer à écouter pour les messages que l'on va recevoir du serveur
     this.hubConnection.on('UsersList', (data) => {
-      this.zone.run(() => {
-        this.usersList = data;
-      });
+      this.usersList = data;
     });
 
     this.hubConnection.on('ChannelsList', (data) => {
