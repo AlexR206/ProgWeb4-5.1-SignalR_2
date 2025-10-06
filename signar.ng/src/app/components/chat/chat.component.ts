@@ -1,13 +1,8 @@
-import { Component, OnInit } from '@angular/core';
-
+import { Component } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-
 import { Channel, UserEntry } from '../../models/models';
 import { AuthenticationService } from 'src/app/services/authentication.service';
-
-// On doit commencer par ajouter signalr dans les node_modules: npm install @microsoft/signalr
-// Ensuite on inclut la librairie
-import * as signalR from "@microsoft/signalr"
+import * as signalR from "@microsoft/signalr";
 
 @Component({
   selector: 'app-chat',
@@ -16,78 +11,116 @@ import * as signalR from "@microsoft/signalr"
 })
 export class ChatComponent  {
 
-  message: string = "test";
-  messages: string[] = [];
+  // Title of the page
+  title = 'SignalR Chat';
 
-  usersList:UserEntry[] = [];
-  channelsList:Channel[] = [];
+  // Base URLs for API requests (not heavily used in this example)
+  baseUrl = "https://localhost:7060/api/";
+  accountBaseUrl = this.baseUrl + "Account/";
 
-  isConnectedToHub: boolean = false;
+  // Message variables
+  message: string = "test";       // Message typed by the user
+  messages: string[] = [];        // All messages displayed in the chat
 
+  // Lists received from the server
+  usersList:UserEntry[] = [];     // All connected users
+  channelsList:Channel[] = [];    // All available chat channels
+
+  // Connection status flag
+  isConnected: boolean = false;
+
+  // For channel creation
   newChannelName: string = "";
 
+  // Current selected channel or user
   selectedChannel:Channel | null = null;
   selectedUser:UserEntry | null = null;
 
+  // The actual SignalR connection
   private hubConnection?: signalR.HubConnection
 
-  constructor(public http: HttpClient, public authentication:AuthenticationService){
+  constructor(public http: HttpClient, public authentication:AuthenticationService){}
 
-  }
-
+  // Step 1: Connect to the SignalR Hub
   connectToHub() {
-    // On commence par créer la connexion vers le Hub
+    // TODO: Create the connection to the hub
     this.hubConnection = new signalR.HubConnectionBuilder()
-                              .withUrl('http://localhost:5106/chat', { accessTokenFactory: () => localStorage.getItem("token")! })
-                              .build();
+      // The token is retrieved from sessionStorage (used to identify the user)
+      .withUrl('http://localhost:5106/chat', { accessTokenFactory: () => sessionStorage.getItem("token")! })
+      .build();
 
-    // On peut commencer à écouter pour les messages que l'on va recevoir du serveur
+    // 🧩 Step 2: Listen for server messages (the "on" events)
+
+    // 1️⃣ Receive the updated user list
     this.hubConnection.on('UsersList', (data) => {
       this.usersList = data;
     });
 
-    // TODO: Écouter le message pour mettre à jour la liste de channels
+    // 2️⃣ Receive the updated channels list
+    this.hubConnection.on('ChannelsList', (data) => {
+      this.channelsList = data;
+    });
 
+    // 3️⃣ Receive any new chat message
     this.hubConnection.on('NewMessage', (message) => {
       this.messages.push(message);
     });
 
-    // TODO: Écouter le message pour quitter un channel (lorsque le channel est effacé)
+    // 4️⃣ Receive notification when a channel was deleted (forces user to leave)
+    this.hubConnection.on('LeaveChannel', (message) => {
+      this.selectedChannel = null;
+    });
 
-    // On se connecte au Hub
+    // Step 3: Start the connection
     this.hubConnection
       .start()
       .then(() => {
-        this.isConnectedToHub = true;
+        this.isConnected = true;
+        console.log("Connected to hub successfully!");
       })
       .catch(err => console.log('Error while starting connection: ' + err))
   }
 
+  // When a user wants to start a private chat
+  startPrivateChat(user: string) {
+    // Invoke the server-side method
+    this.hubConnection!.invoke('StartPrivateChat', user);
+  }
+
+  // When switching to a different channel
   joinChannel(channel: Channel) {
+    // Leave old channel (if any) and join new one
     let selectedChannelId = this.selectedChannel ? this.selectedChannel.id : 0;
     this.hubConnection!.invoke('JoinChannel', selectedChannelId, channel.id);
     this.selectedChannel = channel;
   }
 
+  // Sending a message (either to a channel or a private chat)
   sendMessage() {
     let selectedChannelId = this.selectedChannel ? this.selectedChannel.id : 0;
     this.hubConnection!.invoke('SendMessage', this.message, selectedChannelId, this.selectedUser?.value);
   }
 
+  // Handle when a user is clicked
   userClick(user:UserEntry) {
     if(user == this.selectedUser){
-      this.selectedUser = null;
+      this.selectedUser = null; // deselect user if clicked again
     }
   }
 
+  // Creating a new channel
   createChannel(){
-    // TODO: Ajouter un invoke
+    // TODO: Call the server to create a new channel
+    this.hubConnection!.invoke('CreateChannel', this.newChannelName);
   }
 
+  // Deleting a channel
   deleteChannel(channel: Channel){
-    // TODO: Ajouter un invoke
+    // TODO: Call the server to delete a channel
+    this.hubConnection!.invoke('DeleteChannel', channel.id);
   }
 
+  // Leaving the current channel
   leaveChannel(){
     let selectedChannelId = this.selectedChannel ? this.selectedChannel.id : 0;
     this.hubConnection!.invoke('JoinChannel', selectedChannelId, 0);
